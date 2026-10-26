@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#C8102E">
+<title>Gas leads, Ahmedabad</title>
+<!--
+Design plan (frontend-design skill, 2026-10-26)
+Subject: an Indane agency's field team in Bopal calling and visiting gas buyers; a phone in one hand in a van.
+Colours: cylinder red #C8102E (call, primary), ink #1B2333 (text), slate #5B6475 (secondary), paper #F6F7F9
+(panels), gold #F5B700 (points, our party), leaf #17915A (good outcomes).
+Type: Baloo 2 for names and numbers (rounded, Indian-made, a little playful), Mukta for body; sizes 13/15/18/22/30.
+Phone:  [ Today bar: level, calls 7/20, points, streak ]      Desktop: | sidebar 400px          | map          |
+        [ map, Layers + Near me buttons on the right ]                 | Today bar             |  [detail     |
+        [ bottom sheet: search, chips, ranked list   ]                 | search, chips, list   |   drawer]    |
+        detail = full sheet with Call / WhatsApp / Directions / Google Maps, status buttons, the pitch.
+Bold in one place: the Today bar. Everything else quiet; left aligned; sentence case.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Mukta:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+:root { --red:#C8102E; --ink:#1B2333; --slate:#5B6475; --paper:#F6F7F9; --gold:#F5B700; --leaf:#17915A;
+        --line:#DDE1E8; --display:'Baloo 2', system-ui, sans-serif; --body:'Mukta', system-ui, sans-serif; }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; font:15px/1.45 var(--body); color:var(--ink); background:#fff; }
+button, input, select, textarea { font:inherit; color:inherit; }
+button { cursor:pointer; }
+:focus-visible { outline:3px solid #2F6FDB; outline-offset:2px; }
+#map { position:fixed; inset:0; z-index:1; }
+.leaflet-container { font:inherit; background:#E9ECF1; }
+
+/* Today bar: the one bold element */
+#today { background:linear-gradient(100deg, var(--red) 0%, #9E0B23 100%); color:#fff; padding:10px 14px 12px;
+         display:grid; grid-template-columns:auto 1fr auto; gap:4px 12px; align-items:center; border:0; width:100%;
+         text-align:left; }
+#today .lvl { font:800 13px/1 var(--display); background:var(--gold); color:var(--ink); padding:6px 9px 5px;
+              border-radius:999px; }
+#today .calls { font:700 18px/1.1 var(--display); }
+#today .calls small { font:400 13px var(--body); opacity:.85; }
+#today .pts { font:800 22px/1 var(--display); text-align:right; }
+#today .pts small { display:block; font:400 12px var(--body); opacity:.85; }
+#today .bar { grid-column:1 / -1; height:9px; background:rgba(255,255,255,.25); border-radius:9px; overflow:hidden; }
+#today .bar i { display:block; height:100%; width:0; background:var(--gold); border-radius:9px; transition:width .4s; }
+
+/* Panel: sidebar on desktop, bottom sheet on phone */
+#panel { position:fixed; z-index:500; background:#fff; display:flex; flex-direction:column; }
+#tools { padding:10px 12px 6px; border-bottom:1px solid var(--line); }
+.searchrow { display:flex; gap:8px; }
+#q { flex:1; min-width:0; height:44px; border:1.5px solid var(--line); border-radius:12px; padding:0 12px;
+     background:var(--paper); font-size:16px; }
+#next { height:44px; border:0; border-radius:12px; padding:0 14px; background:var(--ink); color:#fff;
+        font:700 15px var(--display); white-space:nowrap; }
+.chips { display:flex; gap:6px; overflow-x:auto; padding:8px 0 4px; scrollbar-width:none; }
+.chips::-webkit-scrollbar { display:none; }
+.chip { flex:none; height:36px; padding:0 12px; border-radius:18px; border:1.5px solid var(--line); background:#fff;
+        font-size:14px; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; }
+.chip[aria-pressed=true] { background:var(--ink); border-color:var(--ink); color:#fff; }
+.chip .sw { width:10px; height:10px; border-radius:50%; }
+select.chip { appearance:none; padding-right:12px; }
+#count { font-size:13px; color:var(--slate); padding:2px 2px 0; }
+#list { flex:1; overflow-y:auto; padding:4px 0 90px; -webkit-overflow-scrolling:touch; }
+.item { display:grid; grid-template-columns:40px 1fr auto; gap:10px; align-items:center; padding:10px 12px;
+        border-bottom:1px solid #EEF0F4; cursor:pointer; }
+.item:hover { background:var(--paper); }
+.item.sel { background:#FFF4D6; }
+.ico { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; font-size:20px; }
+.item b { font:700 16px/1.2 var(--display); display:block; }
+.item small { color:var(--slate); font-size:13px; display:block; }
+.item .st { font-size:12px; font-weight:600; }
+.call { width:44px; height:44px; border-radius:50%; background:var(--red); color:#fff; display:grid; place-items:center;
+        text-decoration:none; font-size:20px; }
+.call.off { background:#C9CED8; pointer-events:none; }
+.lk { font:700 12px/1 var(--display); padding:4px 7px 3px; border-radius:6px; display:inline-block; }
+.lk.high { background:#DDF3E7; color:#0E6B40; } .lk.medium { background:#FFF0C7; color:#7A5600; }
+.lk.low { background:#EEF0F4; color:var(--slate); }
+.more { margin:12px; width:calc(100% - 24px); height:44px; border-radius:12px; border:1.5px solid var(--line); background:#fff; }
+.empty { padding:24px 16px; color:var(--slate); }
+
+/* Detail */
+#detail { position:fixed; z-index:900; background:#fff; overflow-y:auto; display:none; }
+#detail.open { display:block; }
+.dhead { position:sticky; top:0; background:#fff; padding:14px 16px 10px; border-bottom:1px solid var(--line); z-index:2; }
+.dhead h2 { font:800 24px/1.15 var(--display); margin:6px 44px 6px 0; }
+.dhead > .tags:first-of-type { padding-right:52px; }
+.dclose { position:absolute; top:10px; right:10px; width:44px; height:44px; border-radius:50%; border:0;
+          background:var(--paper); font-size:22px; }
+.tags { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:13px; color:var(--slate); }
+.tag { background:var(--paper); border-radius:6px; padding:3px 8px; }
+.actions { display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:8px; padding:12px 16px; }
+.act { height:52px; border-radius:14px; border:1.5px solid var(--line); background:#fff; display:flex; flex-direction:column;
+       align-items:center; justify-content:center; text-decoration:none; color:var(--ink); font-size:12px; gap:1px; }
+.act span { font-size:19px; line-height:1; }
+.act.primary { background:var(--red); border-color:var(--red); color:#fff; font:700 17px var(--display); flex-direction:row; gap:8px; }
+.act.off { opacity:.35; pointer-events:none; }
+.sec { padding:12px 16px; border-top:1px solid #EEF0F4; }
+.sec h3 { font:700 15px var(--display); margin:0 0 4px; color:var(--slate); }
+.sec p { margin:0; }
+.say { background:#FFF8E1; border-left:4px solid var(--gold); padding:10px 12px; border-radius:0 10px 10px 0; font-size:16px; }
+.copy { margin-top:8px; height:36px; border-radius:10px; border:1.5px solid var(--line); background:#fff; padding:0 12px; }
+.status { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; }
+.sbtn { min-height:46px; border-radius:12px; border:1.5px solid var(--line); background:#fff; font-weight:600; text-align:left;
+        padding:6px 10px; display:flex; align-items:center; gap:8px; }
+.sbtn i { width:12px; height:12px; border-radius:50%; flex:none; }
+.sbtn[aria-pressed=true] { border-color:var(--ink); background:var(--ink); color:#fff; }
+.sbtn small { margin-left:auto; font-size:12px; opacity:.7; }
+.fu { display:flex; gap:8px; margin-top:10px; align-items:center; }
+.fu input, .note { border:1.5px solid var(--line); border-radius:10px; padding:8px 10px; background:var(--paper); }
+.note { width:100%; margin-top:8px; min-height:64px; resize:vertical; }
+.links a { margin-right:14px; color:#2F6FDB; }
+
+/* Floating map buttons and layers */
+.fab { position:fixed; z-index:600; right:12px; width:48px; height:48px; border-radius:14px; border:0; background:#fff;
+       box-shadow:0 2px 6px rgba(27,35,51,.25); font-size:21px; }
+#layersBtn { top:84px; } #meBtn { top:140px; }
+#layers { position:fixed; z-index:950; right:12px; top:84px; width:290px; max-width:calc(100% - 24px); background:#fff;
+          border-radius:16px; box-shadow:0 6px 24px rgba(27,35,51,.3); padding:12px 14px; display:none; }
+#layers.open { display:block; }
+#layers h3 { font:700 16px var(--display); margin:0 0 6px; }
+#layers label { display:flex; align-items:center; gap:10px; min-height:40px; }
+#layers input { width:20px; height:20px; }
+#layers .sw { width:18px; height:14px; border-radius:4px; border:1.5px solid rgba(0,0,0,.25); }
+#layers .x { position:absolute; right:8px; top:6px; border:0; background:none; font-size:22px; width:40px; height:40px; }
+
+/* Today panel */
+#todayPanel { position:fixed; z-index:960; inset:auto 0 0 0; background:#fff; border-radius:18px 18px 0 0; padding:16px;
+              box-shadow:0 -6px 24px rgba(27,35,51,.25); display:none; max-height:80vh; overflow-y:auto; }
+#todayPanel.open { display:block; }
+#todayPanel h3 { font:800 20px var(--display); margin:0 0 8px; }
+#todayPanel .row { display:flex; gap:8px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+#todayPanel .btn { height:44px; border-radius:12px; border:1.5px solid var(--line); background:#fff; padding:0 14px; }
+#todayPanel input[type=number] { width:80px; height:44px; border:1.5px solid var(--line); border-radius:12px; padding:0 10px; }
+
+#toast { position:fixed; z-index:2000; left:50%; bottom:24px; transform:translate(-50%, 140%); background:var(--ink);
+         color:#fff; padding:12px 18px; border-radius:14px; font:700 16px var(--display); transition:transform .25s; }
+#toast.show { transform:translate(-50%, 0); }
+.burst { position:fixed; z-index:2001; pointer-events:none; width:10px; height:10px; border-radius:2px; }
+@media (prefers-reduced-motion: reduce) { .burst { display:none; } #toast, #today .bar i { transition:none; } }
+
+/* Phone */
+@media (max-width: 899px) {
+  #today { position:fixed; z-index:700; top:0; left:0; right:0; padding-top:calc(10px + env(safe-area-inset-top)); }
+  #panel { left:0; right:0; bottom:0; height:46vh; border-radius:18px 18px 0 0; box-shadow:0 -4px 18px rgba(27,35,51,.18);
+           transition:height .25s; }
+  #panel.peek { height:150px; } #panel.full { height:calc(100% - 70px); }
+  .grab { height:22px; display:grid; place-items:center; border:0; background:none; width:100%; touch-action:none; }
+  .grab i { width:44px; height:5px; border-radius:3px; background:#C9CED8; }
+  #detail { inset:0; padding-bottom:env(safe-area-inset-bottom); }
+  .leaflet-control-zoom { display:none; }
+}
+/* Desktop */
+@media (min-width: 900px) {
+  #map { left:400px; }
+  #panel { top:0; left:0; bottom:0; width:400px; border-right:1px solid var(--line); }
+  #today { position:static; }
+  .grab { display:none; }
+  #detail { top:0; right:0; bottom:0; width:430px; box-shadow:-6px 0 24px rgba(27,35,51,.18); }
+  #todayPanel { inset:auto auto 0 0; width:400px; }
+  .status { grid-template-columns:repeat(2, 1fr); }
+  .fab { right:16px; } #layers { right:72px; top:16px; } #layersBtn { top:16px; } #meBtn { top:72px; }
+}
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Map of gas buyers"></div>
+
+<div id="panel" class="half">
+  <button id="today" aria-label="Today's progress, tap for follow-ups and sharing">
+    <span class="lvl" id="lvl">Rookie</span>
+    <span class="calls" id="calls">0 / 20 calls <small>today</small></span>
+    <span class="pts" id="pts">0<small id="streak">no streak yet</small></span>
+    <span class="bar"><i id="barfill"></i></span>
+  </button>
+  <button class="grab" id="grab" aria-label="Resize list"><i></i></button>
+  <div id="tools">
+    <div class="searchrow">
+      <input id="q" type="search" placeholder="Search name, area or product" aria-label="Search">
+      <button id="next" title="Open the best place you have not called yet">Next call</button>
+    </div>
+    <div class="chips" id="quick"></div>
+    <div class="chips" id="types"></div>
+    <div id="count"></div>
+  </div>
+  <div id="list" role="list"></div>
+</div>
+
+<button class="fab" id="layersBtn" aria-label="Map layers">🗺️</button>
+<button class="fab" id="meBtn" aria-label="Sort by distance from me">📍</button>
+<div id="layers" role="dialog" aria-label="Map layers">
+  <button class="x" id="layersX" aria-label="Close">×</button>
+  <h3>Map layers</h3>
+  <div id="layerList"></div>
+</div>
+
+<div id="detail" role="dialog" aria-modal="true" aria-label="Place details"></div>
+
+<div id="todayPanel" role="dialog" aria-label="Today">
+  <h3>Today</h3>
+  <div class="row">Daily goal <input type="number" id="goal" min="1" max="200"> calls</div>
+  <div id="levels" style="color:var(--slate);font-size:14px"></div>
+  <h3 style="margin-top:14px">Follow-ups due</h3>
+  <div id="fuList"></div>
+  <h3 style="margin-top:14px">Share with the team</h3>
+  <p style="margin:0;color:var(--slate);font-size:14px">Your calls are saved on this phone. Send the file to the other phone and open it there with Import.</p>
+  <div class="row"><button class="btn" id="exportBtn">Export my calls</button>
+    <label class="btn" style="display:inline-flex;align-items:center">Import calls<input type="file" id="importIn" accept=".csv" hidden></label>
+    <button class="btn" id="todayX">Close</button></div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const BOPAL = [23.0336, 72.4634];
+const CATS = {
+  industrial_plant:       ["Factory", "#D55E00", "🏭"],
+  fabrication_cutting:    ["Cutting and fabrication", "#E69F00", "🔥"],
+  food_factory:           ["Food factory", "#CC79A7", "🍪"],
+  canteen_contractor:     ["Canteen contractor", "#0072B2", "🍱"],
+  caterer:                ["Caterer", "#56B4E9", "🍲"],
+  banquet_partyplot:      ["Banquet and party plot", "#009E73", "💍"],
+  hotel_restaurant_large: ["Hotel and big restaurant", "#7B4FA0", "🏨"],
+  hospital:               ["Hospital", "#A61E4D", "🏥"],
+  institution_kitchen:    ["Hostel and PG kitchen", "#3A9C8F", "🛏️"],
+  bakery_sweets:          ["Bakery and sweets", "#B8860B", "🧁"],
+  other:                  ["Other", "#8A93A3", "📍"]
+};
+const STATUS = {
+  new:        ["Not called", 0, "#9AA3B2"],
+  noans:      ["No answer", 1, "#7C8AA5"],
+  talked:     ["Talked", 2, "#2F6FDB"],
+  interested: ["Interested", 5, "#17915A"],
+  trial:      ["Trial booked", 10, "#0E7A4B"],
+  party:      ["Our party", 25, "#F5B700"],
+  notint:     ["Not interested", 1, "#B0B6C2"],
+  wrong:      ["Wrong number", 0, "#B0B6C2"]
+};
+const LEVELS = [[0, "Rookie"], [30, "Caller"], [100, "Hustler"], [250, "Closer"], [600, "Gas boss"], [1200, "Legend"]];
+const GAS = { adani_ahmedabad_daskroi: "Adani Total Gas area", gujarat_gas_district: "Gujarat Gas area",
+              gandhinagar_district: "Sabarmati Gas area (Gandhinagar)", unknown: "Not known" };
+const BUYER = { venue: "The venue buys it (own kitchen)", caterer: "The caterer brings it: ask the manager which caterers cook here",
+                both: "Both the venue and its caterers", unknown: "Not known yet: ask on the call" };
+const AREA_COL = { "Adani Total Gas area": "#2F6FDB", "Gujarat Gas area": "#E8590C", "Sabarmati Gas area (Gandhinagar district)": "#8E44AD" };
+const KEY = "gasleads-v1";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const day = t => new Date(t).toISOString().slice(0, 10);
+const todayStr = () => day(Date.now());
+
+/* ---------- saved state ---------- */
+let S = { marks: {}, log: [], goal: 20 };
+try { S = Object.assign(S, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+/* ---------- map ---------- */
+const map = L.map("map", { preferCanvas: true, zoomControl: true }).setView(BOPAL, 12);
+const voyager = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" }).addTo(map);
+const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19, attribution: "Tiles &copy; Esri, Maxar, Earthstar Geographics" });
+const rings = L.layerGroup([5, 10, 20].map(k => L.circle(BOPAL, { radius: k * 1000, color: "#1B2333", weight: 1,
+  dashArray: "5 7", fill: false, interactive: false }))).addTo(map);
+L.marker(BOPAL, { title: "Bopal" }).addTo(map).bindTooltip("Bopal", { direction: "top" });
+const renderer = L.canvas({ padding: 0.3 });
+
+let rows = [], byKey = {}, markers = {}, sel = null, me = null, meDot = null, shown = 0, LIMIT = 80;
+const F = { q: "", types: new Set(), dist: 999, high: false, big: false, notcalled: false, hideParty: false, area: "" };
+
+function statusOf(r) { const m = S.marks[r.key]; return m ? m.s : (r.existing ? "party" : "new"); }
+function kmTo(r) { return me ? map.distance(me, r.ll) / 1000 : r.km; }
+function score(r) {
+  const w = { high: 3, medium: 2, low: 1 }[r.likelihood] || 1.5;
+  return w * 100 + Math.min(r.cyl, 300) / 3 - kmTo(r) * 1.5;
+}
+function style(r) {
+  const st = statusOf(r), c = (CATS[r.cat] || CATS.other)[1];
+  if (st === "party") return { radius: 9, color: "#1B2333", weight: 2.5, fillColor: "#F5B700", fillOpacity: 1 };
+  if (st === "notint" || st === "wrong") return { radius: 6, color: "#fff", weight: 1, fillColor: "#B0B6C2", fillOpacity: .7 };
+  if (st === "interested" || st === "trial") return { radius: 9, color: "#17915A", weight: 3.5, fillColor: c, fillOpacity: .95 };
+  if (st === "talked" || st === "noans") return { radius: 8, color: "#2F6FDB", weight: 2.5, fillColor: c, fillOpacity: .95 };
+  return { radius: 7, color: "#fff", weight: 1.5, fillColor: c, fillOpacity: .95 };
+}
+
+/* ---------- data ---------- */
+function load(res) {
+  res.data.forEach((x, i) => {
+    const lat = parseFloat(x.lat), lon = parseFloat(x.lon);
+    if (!isFinite(lat) || !isFinite(lon)) return;
+    const r = Object.assign({}, x);
+    r.cat = CATS[x.category] ? x.category : "other";
+    r.ll = [lat, lon];
+    r.key = (x.name || "") + "|" + lat.toFixed(5) + "|" + lon.toFixed(5);
+    r.km = map.distance(BOPAL, r.ll) / 1000;
+    r.cyl = parseFloat(x.est_cyl_month) || 0;
+    r.existing = /^yes$/i.test((x.existing_customer || "").trim());
+    r.text = [x.name, x.address, x.cluster, x.what_they_do, x.contact_name, CATS[r.cat][0]].join(" ").toLowerCase();
+    rows.push(r); byKey[r.key] = r;
+    const m = L.circleMarker(r.ll, Object.assign({ renderer }, style(r)));
+    m.on("click", () => openDetail(r.key));
+    m.bindTooltip(x.name, { direction: "top", offset: [0, -6] });
+    markers[r.key] = m;
+  });
+  buildChips(); render(); updateToday();
+}
+
+/* ---------- filters ---------- */
+function buildChips() {
+  const n = {}; rows.forEach(r => n[r.cat] = (n[r.cat] || 0) + 1);
+  $("#types").innerHTML = Object.keys(CATS).filter(c => n[c]).map(c =>
+    `<button class="chip" aria-pressed="false" data-t="${c}"><span>${CATS[c][2]}</span>${esc(CATS[c][0])} <small>${n[c]}</small></button>`).join("");
+  $("#types").onclick = e => { const b = e.target.closest("[data-t]"); if (!b) return;
+    const t = b.dataset.t; F.types.has(t) ? F.types.delete(t) : F.types.add(t);
+    b.setAttribute("aria-pressed", F.types.has(t)); LIMIT = 80; render(); };
+  const areas = [...new Set(rows.map(r => r.cluster).filter(Boolean))].sort();
+  $("#quick").innerHTML = `
+    <button class="chip" data-f="high" aria-pressed="false">High chance</button>
+    <button class="chip" data-f="big" aria-pressed="false">Big buyers (40+ a month)</button>
+    <button class="chip" data-f="notcalled" aria-pressed="false">Not called yet</button>
+    <button class="chip" data-f="hideParty" aria-pressed="false">Hide our parties</button>
+    <select class="chip" id="dist" aria-label="Distance"><option value="999">Any distance</option>
+      <option value="5">Within 5 km</option><option value="10">Within 10 km</option><option value="20">Within 20 km</option></select>
+    <select class="chip" id="area" aria-label="Area"><option value="">All areas</option>${areas.map(a => `<option>${esc(a)}</option>`).join("")}</select>`;
+  $("#quick").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return;
+    F[b.dataset.f] = !F[b.dataset.f]; b.setAttribute("aria-pressed", F[b.dataset.f]); LIMIT = 80; render(); };
+  $("#dist").onchange = e => { F.dist = +e.target.value; render(); };
+  $("#area").onchange = e => { F.area = e.target.value; render(); };
+}
+function passes(r) {
+  const st = statusOf(r);
+  return (!F.q || r.text.includes(F.q)) && (!F.types.size || F.types.has(r.cat)) && kmTo(r) <= F.dist
+    && (!F.high || r.likelihood === "high") && (!F.big || r.cyl >= 40) && (!F.notcalled || st === "new")
+    && (!F.hideParty || st !== "party") && (!F.area || r.cluster === F.area);
+}
+
+/* ---------- list ---------- */
+function render() {
+  const vis = rows.filter(passes).sort((a, b) => score(b) - score(a));
+  const visSet = new Set(vis.map(r => r.key));
+  rows.forEach(r => { const m = markers[r.key], on = visSet.has(r.key);
+    if (on && !map.hasLayer(m)) m.addTo(map); else if (!on && map.hasLayer(m)) map.removeLayer(m); });
+  shown = vis.length;
+  $("#count").textContent = `${vis.length} of ${rows.length} places` + (me ? ", nearest to you first by rank" : ", best first");
+  if (!vis.length) { $("#list").innerHTML = `<div class="empty">Nothing matches these filters. Clear a chip above or search another word.</div>`; return; }
+  $("#list").innerHTML = vis.slice(0, LIMIT).map(item).join("") +
+    (vis.length > LIMIT ? `<button class="more" id="more">Show ${Math.min(80, vis.length - LIMIT)} more</button>` : "");
+  const more = $("#more"); if (more) more.onclick = () => { LIMIT += 80; render(); };
+}
+function firstPhone(r) { return (r.phone || "").split(/[;\/,]/).map(p => p.trim()).filter(Boolean)[0] || ""; }
+function telOf(p) { return p.replace(/[^\d+]/g, ""); }
+function item(r) {
+  const c = CATS[r.cat], st = statusOf(r), ph = firstPhone(r);
+  const who = r.contact_name ? `Ask for ${esc(r.contact_name)}` : esc(r.cluster || "");
+  return `<div class="item${sel === r.key ? " sel" : ""}" role="listitem" data-k="${esc(r.key)}" tabindex="0">
+    <span class="ico" style="background:${c[1]}22">${c[2]}</span>
+    <span><b>${esc(r.name)}</b>
+      <small>${esc(c[0])}, ${kmTo(r).toFixed(1)} km${r.cyl ? `, about ${r.cyl} cylinders a month` : ""}</small>
+      <small>${r.likelihood ? `<span class="lk ${esc(r.likelihood)}">${esc(cap(r.likelihood))} chance</span> ` : ""}${who}
+        ${st !== "new" ? `<span class="st" style="color:${STATUS[st][2] === "#F5B700" ? "#9A7000" : STATUS[st][2]}"> ${STATUS[st][0]}</span>` : ""}</small></span>
+    <a class="call${ph ? "" : " off"}" href="${ph ? "tel:" + esc(telOf(ph)) : "#"}" aria-label="Call ${esc(r.name)}" data-call="${esc(r.key)}">📞</a>
+  </div>`;
+}
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+$("#list").addEventListener("click", e => {
+  if (e.target.closest("[data-call]")) { const k = e.target.closest("[data-call]").dataset.call; nudgeCall(k); return; }
+  const it = e.target.closest(".item"); if (it) openDetail(it.dataset.k, true);
+});
+$("#list").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.classList.contains("item")) openDetail(e.target.dataset.k, true); });
+$("#q").addEventListener("input", e => { F.q = e.target.value.trim().toLowerCase(); LIMIT = 80; render(); });
+$("#next").onclick = () => {
+  const r = rows.filter(r => statusOf(r) === "new" && passes(r)).sort((a, b) => score(b) - score(a))[0]
+         || rows.filter(r => statusOf(r) === "new").sort((a, b) => score(b) - score(a))[0];
+  if (r) openDetail(r.key, true); else toast("Every place has been called. Well done.");
+};
+
+/* ---------- detail ---------- */
+function openDetail(k, fly) {
+  const r = byKey[k]; if (!r) return;
+  if (sel && markers[sel]) markers[sel].setStyle(style(byKey[sel]));
+  sel = k; markers[k].setStyle(Object.assign(style(r), { color: "#C8102E", weight: 4 }));
+  if (fly) map.flyTo(r.ll, Math.max(map.getZoom(), 14), { duration: .6 });
+  const c = CATS[r.cat], st = statusOf(r), m = S.marks[k] || {};
+  const phones = (r.phone || "").split(/[;\/,]/).map(p => p.trim()).filter(Boolean);
+  const ph = phones[0] || "", d10 = telOf(ph).replace(/^\+?91/, "").replace(/^0/, "");
+  const wa = /^[6-9]\d{9}$/.test(d10) ? `https://wa.me/91${d10}` : "";
+  const gq = encodeURIComponent(r.name + ", " + (r.address || "Ahmedabad"));
+  const sec = (title, html) => html ? `<div class="sec"><h3>${title}</h3>${html}</div>` : "";
+  const link = (u, t) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${t}</a>` : "";
+  const ask = r.contact_name
+    ? `<p><b>${esc(r.contact_name)}</b>${r.contact_role ? ", " + esc(r.contact_role) : ""} ${r.contact_source ? "(" + link(r.contact_source, "where this is from") + ")" : ""}</p>`
+    : (r.buyer_role ? `<p>${esc(cap(r.buyer_role))}. No name found yet: ask who handles gas purchase.</p>` : "");
+  $("#detail").innerHTML = `
+    <div class="dhead">
+      <button class="dclose" id="dclose" aria-label="Close">×</button>
+      <div class="tags"><span class="tag" style="background:${c[1]}22">${c[2]} ${esc(c[0])}</span>
+        ${r.likelihood ? `<span class="lk ${esc(r.likelihood)}">${esc(cap(r.likelihood))} chance</span>` : ""}
+        <span>${kmTo(r).toFixed(1)} km${me ? " from you" : " from Bopal"}</span>
+        ${r.cyl ? `<span>about ${r.cyl} cylinders a month (a guess)</span>` : ""}</div>
+      <h2>${esc(r.name)}</h2>
+      <div class="tags">${esc(r.address || "")}</div>
+    </div>
+    <div class="actions">
+      <a class="act primary${ph ? "" : " off"}" href="${ph ? "tel:" + esc(telOf(ph)) : "#"}" id="callBig">📞 Call</a>
+      <a class="act${wa ? "" : " off"}" href="${wa || "#"}" target="_blank" rel="noopener"><span>💬</span>WhatsApp</a>
+      <a class="act" href="https://www.google.com/maps/dir/?api=1&destination=${r.ll[0]},${r.ll[1]}" target="_blank" rel="noopener"><span>🧭</span>Directions</a>
+      <a class="act" href="https://www.google.com/maps/search/?api=1&query=${gq}" target="_blank" rel="noopener"><span>🗺️</span>Google</a>
+    </div>
+    ${phones.length > 1 ? `<div class="sec"><h3>Other numbers</h3><p>${phones.slice(1).map(p => `<a href="tel:${esc(telOf(p))}">${esc(p)}</a>`).join(", ")}</p></div>` : ""}
+    ${!ph ? `<div class="sec"><p>No phone number found yet. Try the Google page or the website.</p></div>` : ""}
+    <div class="sec"><h3>How did it go?</h3>
+      <div class="status">${Object.keys(STATUS).map(s => `<button class="sbtn" data-s="${s}" aria-pressed="${s === st}"><i style="background:${STATUS[s][2]}"></i>${STATUS[s][0]}${STATUS[s][1] ? `<small>+${STATUS[s][1]}</small>` : ""}</button>`).join("")}</div>
+      <div class="fu"><label for="fu">Call back on</label><input type="date" id="fu" value="${esc(m.f || "")}"></div>
+      <textarea class="note" id="note" placeholder="Notes: who you spoke to, price they pay, cylinders a month">${esc(m.n || "")}</textarea>
+    </div>
+    ${sec("Ask for", ask)}
+    ${r.pitch ? `<div class="sec"><h3>What to say</h3><p class="say" id="pitch">${esc(r.pitch)}</p><button class="copy" id="copy">Copy</button></div>` : ""}
+    ${sec("What they do", r.what_they_do ? `<p>${esc(r.what_they_do)}</p>` : "")}
+    ${sec("Why they would use gas", r.lpg_evidence ? `<p>${esc(r.lpg_evidence)}</p>` : "")}
+    ${sec("Who buys the gas here", r.gas_buyer ? `<p>${esc(BUYER[r.gas_buyer] || r.gas_buyer)}</p>` : "")}
+    ${sec("Size", r.size ? `<p>${esc(r.size)}</p>` : "")}
+    ${sec("Kitchens and sites they run", r.sites ? `<p>${esc(r.sites)}</p>` : "")}
+    ${sec("Supplier now", r.current_supplier ? `<p>${esc(r.current_supplier)}</p>` : "")}
+    ${sec("Gas pipeline area", `<p>${esc(GAS[r.png_area] || r.png_area || "Not known")}. A pipe at this exact building is not known.</p>`)}
+    ${sec("Email", r.email ? `<p><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></p>` : "")}
+    ${sec("Notes from research", r.notes ? `<p>${esc(r.notes)}</p>` : "")}
+    <div class="sec links">${link(r.website, "Website")}${link(r.source_url, "Source")}</div>`;
+  $("#detail").classList.add("open");
+  $("#detail").scrollTop = 0;
+  $("#dclose").onclick = closeDetail;
+  $("#detail").querySelectorAll(".sbtn").forEach(b => b.onclick = () => setStatus(k, b.dataset.s));
+  $("#fu").onchange = e => { mark(k).f = e.target.value; save(); updateToday(); };
+  $("#note").oninput = e => { mark(k).n = e.target.value; save(); };
+  const cp = $("#copy"); if (cp) cp.onclick = () => { navigator.clipboard && navigator.clipboard.writeText(r.pitch); toast("Copied"); };
+  $("#callBig").addEventListener("click", () => nudgeCall(k));
+  document.querySelectorAll(".item.sel").forEach(e => e.classList.remove("sel"));
+  const li = document.querySelector(`.item[data-k="${CSS.escape(k)}"]`); if (li) li.classList.add("sel");
+}
+function closeDetail() { $("#detail").classList.remove("open"); if (sel && markers[sel]) markers[sel].setStyle(style(byKey[sel])); sel = null; }
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeDetail(); $("#layers").classList.remove("open"); $("#todayPanel").classList.remove("open"); } });
+function mark(k) { return S.marks[k] || (S.marks[k] = { s: statusOf(byKey[k]), t: Date.now() }); }
+function nudgeCall(k) { setTimeout(() => { if (statusOf(byKey[k]) === "new") toast("After the call, tap how it went"); }, 1500); }
+
+/* ---------- game ---------- */
+function setStatus(k, s) {
+  const before = statusOf(byKey[k]); if (before === s) return;
+  const m = mark(k); m.s = s; m.t = Date.now();
+  S.log.push({ k, s, t: m.t }); save();
+  markers[k].setStyle(Object.assign(style(byKey[k]), { color: "#C8102E", weight: 4 }));
+  document.querySelectorAll("#detail .sbtn").forEach(b => b.setAttribute("aria-pressed", b.dataset.s === s));
+  const p = STATUS[s][1];
+  toast(p ? `+${p} points: ${STATUS[s][0]}` : STATUS[s][0]);
+  if (s === "party") burst();
+  updateToday(); render();
+}
+function points() {
+  return Object.entries(S.marks).reduce((a, [k, m]) => a + (byKey[k] && !(byKey[k].existing && !S.log.some(l => l.k === k)) ? STATUS[m.s][1] : 0), 0);
+}
+function updateToday() {
+  const t = todayStr(), callsToday = new Set(S.log.filter(l => day(l.t) === t && l.s !== "new").map(l => l.k)).size;
+  const days = new Set(S.log.map(l => day(l.t)));
+  let streak = 0, d = new Date(); if (!days.has(t)) d.setDate(d.getDate() - 1);
+  while (days.has(day(d))) { streak++; d.setDate(d.getDate() - 1); }
+  const pts = points(), lvl = LEVELS.filter(l => pts >= l[0]).pop(), nxt = LEVELS.find(l => l[0] > pts);
+  const won = Object.entries(S.marks).filter(([k, m]) => m.s === "party" && byKey[k] && !byKey[k].existing).reduce((a, [k]) => a + byKey[k].cyl, 0);
+  $("#lvl").textContent = lvl[1];
+  $("#calls").innerHTML = `${callsToday} / ${S.goal} calls <small>today</small>`;
+  $("#pts").innerHTML = `${pts}<small>${streak ? "🔥 " + streak + " day streak" : "points"}</small>`;
+  $("#barfill").style.width = Math.min(100, callsToday / S.goal * 100) + "%";
+  $("#goal").value = S.goal;
+  $("#levels").innerHTML = `${pts} points, level ${lvl[1]}` + (nxt ? `. ${nxt[0] - pts} more to ${nxt[1]}.` : ". Top level.") +
+    (won ? ` New parties won so far: about ${won} cylinders a month.` : "");
+  const due = Object.entries(S.marks).filter(([k, m]) => m.f && m.f <= t && byKey[k]).sort((a, b) => a[1].f.localeCompare(b[1].f));
+  $("#fuList").innerHTML = due.length ? due.map(([k, m]) => `<div class="item" data-k="${esc(k)}"><span class="ico">⏰</span><span><b>${esc(byKey[k].name)}</b><small>Due ${esc(m.f)}${m.n ? ": " + esc(m.n.slice(0, 60)) : ""}</small></span><span></span></div>`).join("")
+    : `<p style="color:var(--slate)">Nothing due. Set "Call back on" in a place's card to see it here.</p>`;
+}
+$("#fuList").onclick = e => { const it = e.target.closest(".item"); if (it) { $("#todayPanel").classList.remove("open"); openDetail(it.dataset.k, true); } };
+$("#today").onclick = () => $("#todayPanel").classList.toggle("open");
+$("#todayX").onclick = () => $("#todayPanel").classList.remove("open");
+$("#goal").onchange = e => { S.goal = Math.max(1, +e.target.value || 20); save(); updateToday(); };
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1800); }
+function burst() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cols = ["#F5B700", "#C8102E", "#17915A", "#2F6FDB"];
+  for (let i = 0; i < 28; i++) {
+    const e = document.createElement("i"); e.className = "burst"; e.style.background = cols[i % 4];
+    e.style.left = "50%"; e.style.top = "45%"; document.body.appendChild(e);
+    const a = Math.random() * Math.PI * 2, r = 80 + Math.random() * 140;
+    e.animate([{ transform: "translate(0,0) rotate(0)", opacity: 1 },
+               { transform: `translate(${Math.cos(a) * r}px, ${Math.sin(a) * r}px) rotate(${Math.random() * 540}deg)`, opacity: 0 }],
+              { duration: 900 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => e.remove();
+  }
+}
+
+/* ---------- share ---------- */
+$("#exportBtn").onclick = () => {
+  const lines = [["key", "name", "status", "follow_up", "note", "changed"]].concat(Object.entries(S.marks).filter(([k]) => byKey[k])
+    .map(([k, m]) => [k, byKey[k].name, m.s, m.f || "", m.n || "", new Date(m.t).toISOString()]));
+  const csv = Papa.unparse(lines), a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `gas-calls-${todayStr()}.csv`; a.click();
+  toast("Exported " + (lines.length - 1) + " places");
+};
+$("#importIn").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  Papa.parse(f, { header: true, skipEmptyLines: true, complete: res => {
+    let n = 0;
+    res.data.forEach(x => { if (!byKey[x.key] || !STATUS[x.status]) return;
+      const t = Date.parse(x.changed) || Date.now(), cur = S.marks[x.key];
+      if (!cur || cur.t < t) { S.marks[x.key] = { s: x.status, f: x.follow_up, n: x.note, t }; S.log.push({ k: x.key, s: x.status, t }); n++; } });
+    save(); rows.forEach(r => markers[r.key].setStyle(style(r))); updateToday(); render(); toast(`Imported ${n} updates`);
+  } });
+};
+
+/* ---------- layers ---------- */
+const overlays = [];
+function addAreas(fc) {
+  const gas = {}, est = L.layerGroup();
+  fc.features.forEach(f => {
+    const p = f.properties;
+    if (p.kind === "gas_area") {
+      const col = AREA_COL[p.name] || "#888";
+      gas[p.name] = L.geoJSON(f, { style: { color: col, weight: 2, fillColor: col, fillOpacity: .12 } })
+        .bindPopup(`<b>${esc(p.name)}</b><br>${esc(p.company)}<br><small>${esc(p.detail)}<br>${esc(p.note)}</small>`);
+    } else {
+      est.addLayer(L.geoJSON(f, { style: { color: "#5B6475", weight: 1, dashArray: "3 3", fillColor: "#5B6475", fillOpacity: .08 } })
+        .bindTooltip(esc(p.name), { sticky: true }));
+    }
+  });
+  Object.entries(gas).forEach(([n, l]) => { overlays.push([n, l, AREA_COL[n], true]); l.addTo(map); l.bringToBack(); });
+  overlays.push(["Industrial estates", est, "#5B6475", true]); est.addTo(map);
+  drawLayerList();
+}
+function addAgencies(res) {
+  const COL = { IOCL: "#F26B21", HPCL: "#1D4E9E", BPCL: "#F2C200", private: "#8A93A3" };
+  const g = L.layerGroup();
+  res.data.forEach(a => { const lat = parseFloat(a.lat), lon = parseFloat(a.lon); if (!isFinite(lat) || !isFinite(lon)) return;
+    g.addLayer(L.circleMarker([lat, lon], { renderer, radius: 6, color: "#1B2333", weight: 1.5, fillColor: COL[a.company] || "#999", fillOpacity: 1 })
+      .bindPopup(`<b>${esc(a.name)}</b><br>${esc(a.company)} ${esc(a.kind || "")}<br>${esc(a.address || "")}<br>${a.phone ? `<a href="tel:${esc(telOf(a.phone))}">${esc(a.phone)}</a>` : ""}`)); });
+  if (g.getLayers().length) { overlays.push(["Other gas agencies", g, "#F26B21", false]); drawLayerList(); }
+}
+function drawLayerList() {
+  const base = `<label><input type="checkbox" id="satChk"> Satellite view</label>
+    <label><input type="checkbox" id="ringChk" checked> Rings at 5, 10, 20 km</label>`;
+  $("#layerList").innerHTML = overlays.map((o, i) => `<label><input type="checkbox" data-o="${i}" ${map.hasLayer(o[1]) ? "checked" : ""}>
+    <span class="sw" style="background:${o[2]}33;border-color:${o[2]}"></span>${esc(o[0])}</label>`).join("") + base +
+    `<p style="font-size:13px;color:var(--slate);margin:6px 0 0">Coloured areas show which company holds the piped-gas licence, not whether a pipe reaches a building.</p>`;
+  $("#layerList").querySelectorAll("[data-o]").forEach(c => c.onchange = () => { const l = overlays[c.dataset.o][1]; c.checked ? l.addTo(map) : map.removeLayer(l); });
+  $("#satChk").onchange = e => { if (e.target.checked) { map.removeLayer(voyager); satellite.addTo(map); } else { map.removeLayer(satellite); voyager.addTo(map); } };
+  $("#ringChk").onchange = e => e.target.checked ? rings.addTo(map) : map.removeLayer(rings);
+}
+$("#layersBtn").onclick = () => $("#layers").classList.toggle("open");
+$("#layersX").onclick = () => $("#layers").classList.remove("open");
+$("#meBtn").onclick = () => {
+  if (!navigator.geolocation) return toast("This browser cannot share your location");
+  navigator.geolocation.getCurrentPosition(p => {
+    me = [p.coords.latitude, p.coords.longitude];
+    if (meDot) map.removeLayer(meDot);
+    meDot = L.circleMarker(me, { radius: 8, color: "#fff", weight: 3, fillColor: "#2F6FDB", fillOpacity: 1 }).addTo(map);
+    map.flyTo(me, 13); render(); toast("Sorted by distance from you");
+  }, () => toast("Location is off. Allow it in the browser to sort by distance."), { enableHighAccuracy: true, timeout: 8000 });
+};
+
+/* ---------- phone sheet ---------- */
+(function sheet() {
+  const p = $("#panel"), g = $("#grab"); let y0 = null;
+  const order = ["peek", "half", "full"];
+  const setS = s => { order.forEach(o => p.classList.remove(o)); p.classList.add(s); setTimeout(() => map.invalidateSize(), 260); };
+  g.onclick = () => { const i = order.findIndex(o => p.classList.contains(o)); setS(order[(i + 1) % 3]); };
+  g.addEventListener("pointerdown", e => { y0 = e.clientY; g.setPointerCapture(e.pointerId); });
+  g.addEventListener("pointerup", e => { if (y0 === null) return; const dy = e.clientY - y0; y0 = null;
+    if (Math.abs(dy) < 25) return; const i = order.findIndex(o => p.classList.contains(o));
+    setS(order[Math.max(0, Math.min(2, i + (dy < 0 ? 1 : -1)))]); });
+  $("#q").addEventListener("focus", () => { if (innerWidth < 900 && p.classList.contains("peek")) setS("half"); });
+})();
+
+/* ---------- start ---------- */
+if (window.PLACES_CSV) load(Papa.parse(window.PLACES_CSV, { header: true, skipEmptyLines: true }));
+else Papa.parse("places.csv?v=" + Date.now(), { download: true, header: true, skipEmptyLines: true, complete: load,
+  error: e => { $("#count").textContent = "Could not load the places file: " + e; } });
+if (window.AREAS) addAreas(window.AREAS);
+else fetch("areas.geojson").then(r => r.json()).then(addAreas).catch(() => {});
+if (window.AGENCIES_CSV) addAgencies(Papa.parse(window.AGENCIES_CSV, { header: true, skipEmptyLines: true }));
+</script>
+</body>
+</html>
